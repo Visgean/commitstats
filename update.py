@@ -8,26 +8,25 @@ from github import Github
 
 def get_github_commits(token, username):
     """
-    Returns following structure
+    Args:
+        username: gh username
+        token: gh personal token
 
-    [
-        {
-            "datetime": utc datetime,
-            "hash": commit hash string,
-            "public": bool, if this commit was in public repository,
-            "additions": number of lines added,
-            "deletions": number of lines deleted,
+    Returns:
+        [
+            {
+                "datetime": utc datetime,
+                "hash": commit hash string,
+                "public": bool, if this commit was in public repository,
+                "additions": number of lines added,
+                "deletions": number of lines deleted,
 
-            # for public repos following params will be filled
-            "message": string with the commit message,
-            "repo_name": string with repository name,
-            "link": link to github page with this commit
-        }
-    ]
-
-    :param token: gh token
-    :param username: gh username
-    :return: list with commits
+                # for public repos following params will be filled
+                "message": string with the commit message,
+                "repo_name": string with repository name,
+                "link": link to github page with this commit
+            }
+        ]
     """
     commits = []
 
@@ -38,7 +37,7 @@ def get_github_commits(token, username):
     for repo in repos:
         is_public = not repo.private
         repo_name = repo.full_name
-        
+
         for commit in repo.get_commits(author=username):
             commit_data = {
                 'datetime': commit.commit.author.date.isoformat(),
@@ -60,8 +59,10 @@ def get_github_commits(token, username):
 
 def get_project_stats(commits):
     """
-    :param commits: list of commit dictionaries
-    :return: {'project': commit_count}
+    Args:
+        commits: list of commits, see ``get_github_commits`` for format
+
+    Returns: {'project': commit_count}
     """
     project_stats = defaultdict(lambda: 0)
     project_commits = filter(lambda c: 'repo_name' in c, commits)
@@ -73,8 +74,10 @@ def get_project_stats(commits):
 
 def get_daily_stats(commits):
     """
-    :param commits: list of commits dictionaries
-    :return: {datetime: number of commits}
+    Args:
+        commits: list of commits, see ``get_github_commits`` for format
+
+    Returns: {datetime: number of commits}
     """
     daily_stats = defaultdict(lambda: 0)
     for commit in commits:
