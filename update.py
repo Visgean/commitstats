@@ -38,9 +38,7 @@ def get_github_commits(token, username):
     for repo in repos:
         is_public = not repo.private
         repo_name = repo.full_name
-        import ipdb
-        ipdb.set_trace()
-
+        
         for commit in repo.get_commits(author=username):
             commit_data = {
                 'datetime': commit.commit.author.date.isoformat(),
