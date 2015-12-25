@@ -1,6 +1,8 @@
-
+## project specs
 secrets.py
 cache
+d3.js
+
 
 ### PyCharm ###
 # Covers JetBrains IDEs: IntelliJ, RubyMine, PhpStorm, AppCode, PyCharm, CLion, Android Studio and Webstorm
@@ -9,8 +11,6 @@ cache
 
 ## Directory-based project format:
 .idea/
-# if you remove the above rule, at least ignore the following:
-
 
 ## File-based project format:
 *.ipr
