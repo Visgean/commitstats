@@ -1,9 +1,32 @@
 import secrets
 import json
 import dateutil.parser
+import csv
+import os
+from datetime import datetime, timedelta
 
 from collections import defaultdict
 from github import Github
+
+
+COMMITS_FILENAME = 'cache/github_commits.json'
+RELOAD_AFTER = timedelta(hours=6)
+
+
+def age_of_file(filename):
+    """
+    Args:
+        filename: path to file
+
+    Returns:
+     - timedelta() object representing the age of file
+     - None if file does not exist
+    """
+    if not os.path.exists(filename):
+        return None
+
+    modified = datetime.fromtimestamp(os.stat(filename).st_mtime)
+    return datetime.now() - modified
 
 
 def get_github_commits(token, username):
@@ -88,16 +111,20 @@ def get_daily_stats(commits):
 
 
 if __name__ == '__main__':
-    github_commits = get_github_commits(
-        secrets.personal_token,
-        secrets.username
-    )
+    last_modified = age_of_file(COMMITS_FILENAME)
+    if not last_modified or last_modified > RELOAD_AFTER:
+        github_commits = get_github_commits(
+            secrets.personal_token,
+            secrets.username
+        )
+        with open('cache/github_commits.json', 'w') as file:
+            file.write(json.dumps(github_commits, indent=4))
+    else:
+        with open('cache/github_commits.json', 'r') as file:
+            github_commits = json.loads(file.read())
 
-    with open('cache/github_commits.json', 'w') as file:
-        file.write(json.dumps(github_commits, indent=4))
-
-    with open('cache/daily_stats.json', 'w') as file:
-        file.write(json.dumps(get_daily_stats(github_commits), indent=4))
-
-    with open('cache/project_stats.json', 'w') as file:
-        file.write(json.dumps(get_project_stats(github_commits), indent=4))
+    with open('cache/daily_stats.csv', 'w') as csv_file:
+        data = get_daily_stats(github_commits)
+        writer = csv.writer(csv_file)
+        writer.writerow(['date', 'commits'])
+        writer.writerows(data.items())
