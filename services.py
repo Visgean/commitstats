@@ -169,12 +169,7 @@ class BitbucketDiscovery(ClonedRepositoryDiscovery):
                 if isinstance(repo, Repository):
                     repo_names.add(repo.full_name)
 
-        team_repos = [
-            Repository.find_repository_by_full_name(name, self.client)
-            for name in repo_names
-        ]
-
-        repos = chain(
+        my_repos = chain(
             Repository.find_my_repositories_by_role(
                     RepositoryRole.OWNER, self.client),
             Repository.find_my_repositories_by_role(
@@ -183,8 +178,13 @@ class BitbucketDiscovery(ClonedRepositoryDiscovery):
                     RepositoryRole.CONTRIBUTOR, self.client),
             Repository.find_my_repositories_by_role(
                     RepositoryRole.MEMBER, self.client),
-            team_repos
         )
+
+        repo_names.update([r.full_name for r in my_repos])
+        repos = [
+            Repository.find_repository_by_full_name(name, self.client)
+            for name in repo_names
+        ]
 
         for repo in repos:
             is_public = not repo.is_private
