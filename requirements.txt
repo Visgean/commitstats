@@ -1,3 +1,4 @@
 PyGithub
 flask
 python-dateutil
+PyBitbucket

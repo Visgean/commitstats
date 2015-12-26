@@ -3,13 +3,20 @@ import json
 import dateutil.parser
 import csv
 import os
-from datetime import datetime, timedelta
 
+from getpass import getpass
+from datetime import datetime, timedelta
 from collections import defaultdict
+from itertools import chain
 from github import Github
 
+from pybitbucket import bitbucket
+from pybitbucket.repository import Repository, RepositoryRole
+from pybitbucket.auth import BasicAuthenticator
+from pybitbucket.team import Team, TeamRole
 
-COMMITS_FILENAME = 'cache/github_commits.json'
+GH_COMMITS_FILENAME = 'cache/github_commits.json'
+BB_COMMITS_FILENAME = 'cache/bitbucket_commits.json'
 RELOAD_AFTER = timedelta(hours=6)
 
 
@@ -19,14 +26,20 @@ def age_of_file(filename):
         filename: path to file
 
     Returns:
-     - timedelta() object representing the age of file
-     - None if file does not exist
+        timedelta() object representing the age of file
+        None if file does not exist
     """
     if not os.path.exists(filename):
         return None
 
     modified = datetime.fromtimestamp(os.stat(filename).st_mtime)
     return datetime.now() - modified
+
+
+def cached_file_exists(filename):
+    return (
+        os.path.exists(filename) and age_of_file(filename) < RELOAD_AFTER
+    )
 
 
 def get_github_commits(token, username):
@@ -68,13 +81,60 @@ def get_github_commits(token, username):
                 'public': is_public,
                 'additions': commit.stats.additions,
                 'deletions': commit.stats.deletions,
+                'message': commit.commit.message,
+                'repo': repo_name,
+                'link': commit.html_url,
             }
-            print(commit.commit.sha, commit.commit.message)
 
-            if is_public:
-                commit_data['message'] = commit.commit.message
-                commit_data['repo'] = repo_name
-                commit_data['link'] = commit.html_url
+            print(commit.commit.sha, commit.commit.message)
+            commits.append(commit_data)
+
+    return commits
+
+
+def get_bitbucket_commits(username, password, email):
+    commits = []
+    c = bitbucket.Client(BasicAuthenticator(username, password, email))
+
+    teams = Team.find_teams_for_role(role=TeamRole.MEMBER, client=c)
+    repo_names = []
+    # sadly team.repositories does not return repository object which would
+    # filter commits by author
+    for team in teams:
+        for repo in team.repositories():
+            if isinstance(repo, Repository):
+                repo_names.append(repo.full_name)
+
+    team_repos = [Repository.find_repository_by_full_name(name, c)
+                  for name in repo_names]
+
+    repos = chain(
+        Repository.find_my_repositories_by_role(RepositoryRole.OWNER, c),
+        Repository.find_my_repositories_by_role(RepositoryRole.ADMIN, c),
+        Repository.find_my_repositories_by_role(RepositoryRole.CONTRIBUTOR, c),
+        Repository.find_my_repositories_by_role(RepositoryRole.MEMBER, c),
+        team_repos
+    )
+
+    for repo in repos:
+        is_public = not repo.is_private
+        repo_name = repo.full_name
+
+        for commit in repo.commits(author=username):
+            author = commit['author']
+            if 'user' not in author or author['user']['username'] != username:
+                continue
+
+            commit_data = {
+                'datetime': commit['date'],
+                'hash': commit['hash'],
+                'public': is_public,
+                'message': commit['message'],
+                'repo': repo_name,
+                'link': commit['links']['html']['href'],
+            }
+
+            print(commit_data['hash'], commit['message'])
             commits.append(commit_data)
 
     return commits
@@ -111,20 +171,34 @@ def get_daily_stats(commits):
 
 
 if __name__ == '__main__':
-    last_modified = age_of_file(COMMITS_FILENAME)
-    if not last_modified or last_modified > RELOAD_AFTER:
+    if cached_file_exists(GH_COMMITS_FILENAME):
+        with open(GH_COMMITS_FILENAME, 'r') as file:
+            github_commits = json.loads(file.read())
+    else:
         github_commits = get_github_commits(
             secrets.personal_token,
             secrets.username
         )
-        with open('cache/github_commits.json', 'w') as file:
+        with open(GH_COMMITS_FILENAME, 'w') as file:
             file.write(json.dumps(github_commits, indent=4))
+
+    if cached_file_exists(BB_COMMITS_FILENAME):
+        with open(BB_COMMITS_FILENAME, 'r') as file:
+            bitbucket_commits = json.loads(file.read())
+
     else:
-        with open('cache/github_commits.json', 'r') as file:
-            github_commits = json.loads(file.read())
+        bitbucket_commits = get_bitbucket_commits(
+            secrets.bitbucket_username,
+            getpass('Bitbucket password: '),
+            secrets.bitbucket_email
+        )
+        with open(BB_COMMITS_FILENAME, 'w') as file:
+            file.write(json.dumps(bitbucket_commits, indent=4))
+
+    all_commits = bitbucket_commits + github_commits
 
     with open('cache/daily_stats.csv', 'w') as csv_file:
-        data = get_daily_stats(github_commits)
+        data = get_daily_stats(all_commits)
         writer = csv.writer(csv_file)
         writer.writerow(['date', 'commits'])
         writer.writerows(data.items())
