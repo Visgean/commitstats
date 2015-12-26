@@ -66,7 +66,7 @@ svg.selectAll(".month")
     .attr("d", monthPath);
 
 
-d3.csv("cache/daily_stats.csv", function (error, csv) {
+d3.csv("daily_stats.csv", function (error, csv) {
     if (error) throw error;
 
     var data = d3.nest()
