@@ -41,7 +41,7 @@ class BaseCommitDiscovery:
 
         commits = self.fetch_commits()
         with open(self.cache_file, 'w') as file:
-            file.write(json.dumps(commits))
+            file.write(json.dumps(commits, indent=4))
         return commits
 
     def fetch_commits(self):
