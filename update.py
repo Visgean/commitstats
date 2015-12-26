@@ -174,18 +174,6 @@ def get_daily_stats(commits):
 
 
 if __name__ == '__main__':
-    # deal with github shit:
-    if cached_file_exists(GH_COMMITS_FILENAME):
-        with open(GH_COMMITS_FILENAME, 'r') as file:
-            github_commits = json.loads(file.read())
-    else:
-        github_commits = get_github_commits(
-            secrets.personal_token,
-            secrets.username
-        )
-        with open(GH_COMMITS_FILENAME, 'w') as file:
-            file.write(json.dumps(github_commits, indent=4))
-
     # deal with bitbucket:
     if cached_file_exists(BB_COMMITS_FILENAME):
         with open(BB_COMMITS_FILENAME, 'r') as file:
@@ -198,6 +186,18 @@ if __name__ == '__main__':
         )
         with open(BB_COMMITS_FILENAME, 'w') as file:
             file.write(json.dumps(bitbucket_commits, indent=4))
+
+    # deal with github shit:
+    if cached_file_exists(GH_COMMITS_FILENAME):
+        with open(GH_COMMITS_FILENAME, 'r') as file:
+            github_commits = json.loads(file.read())
+    else:
+        github_commits = get_github_commits(
+            secrets.personal_token,
+            secrets.username
+        )
+        with open(GH_COMMITS_FILENAME, 'w') as file:
+            file.write(json.dumps(github_commits, indent=4))
 
     # save all commits stats
     all_commits = bitbucket_commits + github_commits
