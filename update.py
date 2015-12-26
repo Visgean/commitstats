@@ -3,6 +3,7 @@ import json
 import dateutil.parser
 import csv
 import os
+import git
 
 from getpass import getpass
 from datetime import datetime, timedelta
@@ -15,8 +16,10 @@ from pybitbucket.repository import Repository, RepositoryRole
 from pybitbucket.auth import BasicAuthenticator
 from pybitbucket.team import Team, TeamRole
 
+
 GH_COMMITS_FILENAME = 'cache/github_commits.json'
 BB_COMMITS_FILENAME = 'cache/bitbucket_commits.json'
+REPOS_CLONE = 'repos/'
 RELOAD_AFTER = timedelta(hours=6)
 
 
@@ -49,8 +52,8 @@ def get_github_commits(token, username):
         token: gh personal token
 
     Returns:
-        [
-            {
+        {
+            hex: {
                 "datetime": utc datetime,
                 "hash": commit hash string,
                 "public": bool, if this commit was in public repository,
@@ -62,7 +65,7 @@ def get_github_commits(token, username):
                 "repo_name": string with repository name,
                 "link": link to github page with this commit
             }
-        ]
+        }
     """
     commits = []
 
@@ -93,7 +96,7 @@ def get_github_commits(token, username):
 
 
 def get_bitbucket_commits(username, password, email):
-    commits = []
+    commits = {}
     c = bitbucket.Client(BasicAuthenticator(username, password, email))
 
     teams = Team.find_teams_for_role(role=TeamRole.MEMBER, client=c)
@@ -119,38 +122,38 @@ def get_bitbucket_commits(username, password, email):
     for repo in repos:
         is_public = not repo.is_private
         repo_name = repo.full_name
+        repo_dir = os.path.join(REPOS_CLONE, repo_name)
 
-        for commit in repo.commits(author=username):
-            author = commit['author']
-            if 'user' not in author or author['user']['username'] != username:
-                continue
+        if os.path.exists(repo_dir):
+            repo = git.Repo(repo_dir)
+            repo.remote().pull()
+        else:
+            repo = git.Repo.clone_from(repo.clone['ssh'], repo_dir)
 
-            commit_data = {
-                'datetime': commit['date'],
-                'hash': commit['hash'],
-                'public': is_public,
-                'message': commit['message'],
-                'repo': repo_name,
-                'link': commit['links']['html']['href'],
-            }
-
-            print(commit_data['hash'], commit['message'])
-            commits.append(commit_data)
-
+        for email in secrets.git_emails:
+            for commit in repo.iter_commits(author=email):
+                print(commit.hexsha, commit.message)
+                created = datetime.fromtimestamp(commit.authored_date)
+                commits[commit.hexsha] = {
+                    'datetime': created.isoformat(),
+                    'message': commit.message,
+                    'hash': commit.hexsha,
+                    'public': is_public,
+                    'repo': repo_name
+                }
     return commits
 
 
 def get_project_stats(commits):
     """
     Args:
-        commits: list of commits, see ``get_github_commits`` for format
+        commits: dict of commits, see ``get_github_commits`` for format
 
     Returns: {'project': commit_count}
     """
     project_stats = defaultdict(lambda: 0)
-    project_commits = filter(lambda c: 'repo_name' in c, commits)
 
-    for commit in project_commits:
+    for hex_sha, commit in commits.items():
         project_stats[commit['repo']] += 1
     return project_stats
 
@@ -158,12 +161,12 @@ def get_project_stats(commits):
 def get_daily_stats(commits):
     """
     Args:
-        commits: list of commits, see ``get_github_commits`` for format
+        commits: dict of commits, see ``get_github_commits`` for format
 
     Returns: {datetime: number of commits}
     """
     daily_stats = defaultdict(lambda: 0)
-    for commit in commits:
+    for hex_sha, commit in commits.items():
         # sanitize datetime iso datetime to iso date:
         commit_date = dateutil.parser.parse(commit['datetime']).date()
         daily_stats[commit_date.isoformat()] += 1
