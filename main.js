@@ -16,7 +16,7 @@ var color = d3.scale.quantize()
 
 // Create year elements
 var svg = d3.select("body").selectAll("svg")
-    .data(d3.range(2011, 2016))
+    .data(d3.range(2011, new Date().getFullYear() + 1))
     .enter().append("svg")
     .attr("width", width)
     .attr("height", height)
